@@ -2,6 +2,57 @@ import numpy as np
 import nnfs
 from nnfs.datasets import spiral_data, sine_data
 
+class Model:
+
+    def __init__(self):
+        self.layers = []
+
+    def add(self, layer):
+        self.layers.append(layer)
+    
+    def set(self, *, loss, optimizer):
+        self.loss = loss
+        self.optimizer = optimizer
+
+    def train(self, X, y, *, epochs=1, print_every=1):
+        for epoch in range(1, epochs+1):
+            output = self.forward(X)
+    
+    def finalize(self):
+        self.input_layer = Layer_Input()
+        layer_count = len(self.layers)
+
+        self.trainable_layers = []
+
+        for i in range(layer_count):
+            if i == 0:
+                self.layers[i].prev = self.input_layer
+                self.layers[i].next = self.layers[i+1]
+            elif 0 < i < layer_count - 1:
+                self.layers[i].prev = self.layers[i-1]
+                self.layers[i].next = self.layers[i+1]
+            else:
+                self.layers[i].prev = self.layers[i-1]
+                self.layers[i].next = self.loss
+                self.output_layer_activation = self.layers[i]
+
+            if hasattr(self.layers[i], 'weights'):
+                self.trainable_layers.append(self.layers[i])
+            
+    def forward(self, X):
+        self.input_layer.forward(X)
+
+        for layer in self.layers:
+            layer.forward(layer.prev.output)
+        
+        return layer.output
+
+
+
+class Layer_Input:
+    def forward(self, inputs):
+        self.output = inputs
+
 class Layer_Dense:
     def __init__(self, n_inputs, n_neurons, weight_regularizer_l1=0, bias_regularizer_l1=0, weight_regularizer_l2=0, bias_regularizer_l2=0):
         self.weights = 0.1 * np.random.randn(n_inputs, n_neurons)
@@ -48,6 +99,10 @@ class Activation_ReLU:
 
 
 class Activation_Softmax:
+    
+    def predictions(self, outputs):
+        return np.argmax(outputs, axis=1)
+    
     def forward(self, inputs):
         exp_values = np.exp(inputs - np.max(inputs, axis=1, keepdims=True))
         probabilities = exp_values / np.sum(exp_values, axis=1, keepdims=True)
@@ -84,25 +139,31 @@ class Activation_Softmax_Loss_CategoricalCrossentropy:
 
 
 class Loss:
+
+    def remember_trainable_layers(self, trainable_layers):
+        self.trainable_layers = trainable_layers
+
     def calculate(self, output, y):
         sample_loss = self.forward(output, y)
         data_loss = np.mean(sample_loss)
-        return data_loss
+        return data_loss, self.regularization_loss()
     
     def regularization_loss(self, layer):
         regularization_loss = 0
 
-        if layer.weight_regularizer_l1 > 0:
-            regularization_loss += layer.weight_regularizer_l1 * (np.sum(np.abs(layer.weights)))
+        if layer in self.trainable_layers:
 
-        if layer.weight_regularizer_l2 > 0:
-            regularization_loss += layer.weight_regularizer_l2 * np.sum(layer.weights ** 2)
+            if layer.weight_regularizer_l1 > 0:
+                regularization_loss += layer.weight_regularizer_l1 * (np.sum(np.abs(layer.weights)))
 
-        if layer.bias_regularizer_l1 > 0:
-            regularization_loss += layer.bias_regularizer_l1 * np.sum(np.abs(layer.biases))
-        
-        if layer.bias_regularizer_l2 > 0:
-            regularization_loss += layer.bias_regularizer_l2 * np.sum(layer.biases ** 2)
+            if layer.weight_regularizer_l2 > 0:
+                regularization_loss += layer.weight_regularizer_l2 * np.sum(layer.weights ** 2)
+
+            if layer.bias_regularizer_l1 > 0:
+                regularization_loss += layer.bias_regularizer_l1 * np.sum(np.abs(layer.biases))
+            
+            if layer.bias_regularizer_l2 > 0:
+                regularization_loss += layer.bias_regularizer_l2 * np.sum(layer.biases ** 2)
         
         return regularization_loss
     
@@ -273,6 +334,8 @@ class Layer_Dropout:
         self.dinputs = dvalues * self.binary_mask
 
 class Activation_Linear:
+    def predictions(self, outputs):
+        return outputs
 
     def forward(self, inputs):
         self.inputs = inputs
@@ -282,6 +345,9 @@ class Activation_Linear:
         self.dinputs = dvalues.copy()
 
 class Activation_Sigmoid:
+    def predictions(self, outputs):
+        return (outputs > 0.5) * 1
+
     def forward(self, inputs):
         self.inputs = inputs
         self.output = 1 / (1 + np.exp(-inputs))
