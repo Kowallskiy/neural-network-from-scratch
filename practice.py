@@ -53,10 +53,54 @@ class Activation_Softmax:
         self.dinputs = np.empty_like(dvalues)
 
         for index, (single_output, single_dvalue) in enumerate(zip(self.output, dvalues)):
+            single_output = single_output.reshape(-1, 1)
+            jacobian_matrix = np.diagflat(single_output) + np.dot(single_output, single_output.T)
+            self.dinputs[index] = np.dot(jacobian_matrix, single_dvalue)
+
+class Loss:
+    def calculate(self, output, y):
+        sample_losses = self.forward(output, y)
+        data_loss = np.mean(sample_losses)
+        return data_loss
+    
+class Categorical_CrossEntropy(Loss):
+
+    def forward(self, y_pred, y_true):
+        samples = len(y_true)
+        y_pred_clipped = np.clip(y_pred, 1e-7, 1 - 1e-7)
+
+        if y_true.shape == 1:
+            correct_confidences = y_pred_clipped[range(samples), y_true]
+
+        if y_true.shape == 2:
+            correct_confidences = np.sum(y_pred_clipped * y_true, axis=1)
+
+        negative_log_likelihood = -np.log(correct_confidences)
+        return negative_log_likelihood
+    
+    def backward(self, dvalues, y_true):
+        samples = len(dvalues)
+        labels = len(dvalues[0])
+
+        if y_true.shape == 1:
+            y_true = np.eye(labels)[y_true]
+
+        self.dinputs = -y_true / dvalues
+        self.dinputs = self.dinputs / samples
+
+class Optimizer_SGD:
+    def __init__(self, learning_rate=0.001):
+        self.learning_rate = learning_rate
+
+    def update_params(self, layer):
+        layer.weights += -self.learning_rate * layer.dweights
+        layer.biases += -self.learning_rate * layer.dbiases
 
 
 
-a = [[-2, 1, 4, 0, -84, 48, -9, 7],
-     [-2, 355, 76, -333, 48, -9, 7]]
 
-print(f"{a.reshape(-1, 1)}")
+a = [-2, 1, 4, 0, -84, 48, -9, 7]
+a = np.array(a)
+a.reshape(-1, 1)
+a = np.diagflat(a)
+print(a)
