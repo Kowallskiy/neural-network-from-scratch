@@ -1,4 +1,5 @@
 import numpy as np
+from nnfs.datasets import spiral_data
 
 class Layer_dense:
     def __init__(self, n_inputs, n_neurons, l1_weight_regularizer=0, l1_bias_regularizer=0, l2_weight_regularizer=0, l2_bias_regularizer=0):
@@ -58,6 +59,23 @@ class Activation_Softmax:
             self.dinputs[index] = np.dot(jacobian_matrix, single_dvalue)
 
 class Loss:
+
+    def regularization_loss(self, layer):
+        regularization_loss = 0
+        if layer.l1_weight_regularizer > 0:
+            regularization_loss += layer.l1_weight_regularizer * np.sum(np.abs(layer.weights))
+
+        if layer.l2_weight_regularizer > 0:
+            regularization_loss += layer.l2_weight_regularizer * np.sum(layer.weights ** 2)
+
+        if layer.l1_bias_regularizer > 0:
+            regularization_loss += layer.l1_bias_regularizer * np.sum(np.abs(layer.biases))
+
+        if layer.l2_bias_regularizer > 0:
+            regularization_loss += layer.l2_bias_regularizer * np.sum(layer.biases ** 2)
+
+        return regularization_loss
+
     def calculate(self, output, y):
         sample_losses = self.forward(output, y)
         data_loss = np.mean(sample_losses)
@@ -69,10 +87,10 @@ class Categorical_CrossEntropy(Loss):
         samples = len(y_true)
         y_pred_clipped = np.clip(y_pred, 1e-7, 1 - 1e-7)
 
-        if y_true.shape == 1:
+        if len(y_true.shape) == 1:
             correct_confidences = y_pred_clipped[range(samples), y_true]
 
-        if y_true.shape == 2:
+        if len(y_true.shape) == 2:
             correct_confidences = np.sum(y_pred_clipped * y_true, axis=1)
 
         negative_log_likelihood = -np.log(correct_confidences)
@@ -123,11 +141,10 @@ class Optimizer_SGD:
         self.iterations += 1
 
 class Adam_Optimizer:
-    def __init__(self, momentum, epsilon, beta_1, beta_2, decay, learning_rate):
+    def __init__(self, epsilon=1e-7, beta_1=0.9, beta_2=0.999, decay=0., learning_rate=0.001):
         self.learning_rate = learning_rate
         self.current_learning_rate = learning_rate
         self.decay = decay
-        self.momentum = momentum
         self.epsilon = epsilon
         self.beta_1 = beta_1
         self.beta_2 = beta_2
@@ -163,17 +180,57 @@ class Adam_Optimizer:
         self.iterations += 1
 
 
+X, y = spiral_data(samples=100, classes=3)
+
+dense1 = Layer_dense(2, 64, l2_weight_regularizer=5e-4, l2_bias_regularizer=5e-4)
+
+activation1 = Activation_ReLU()
+
+dense2 = Layer_dense(64, 3)
+
+activation2 = Activation_Softmax()
+
+data_loss = Categorical_CrossEntropy()
+
+optimizer = Adam_Optimizer(learning_rate=0.02, decay=5e-7)
+
+for epoch in range(10001):
+    dense1.forward(X)
+
+    activation1.forward(dense1.outputs)
+
+    dense2.forward(activation1.output)
+
+    activation2.forward(dense2.outputs)
+
+    data_loss.calculate(activation2.output, y)
+
+    regularization_loss = data_loss.regularization_loss(dense1) + data_loss.regularization_loss(dense2)
+
+    loss = data_loss.calculate(activation2.output, y) + regularization_loss
+
+    # Accuracy
+    predictions = np.argmax(activation2.output,axis=1)
+    if len(y.shape) == 2:
+        y = np.argmax(y, axis=1)
+    accuracy = np.mean(predictions == y)
+
+    if not epoch % 100:
+        print(f'epoch: {epoch}, ' +
+            f'acc: {accuracy:.3f}, ' +
+            f'loss: {loss:.3f} (' +
+            f'reg_loss: {regularization_loss:.3f}), ' +
+            f'lr: {optimizer.current_learning_rate}')
+        
+    data_loss.backward(data_loss.output, y)
+    activation2.backward(data_loss.dinputs)
+    dense2.backward(activation2.dinputs)
+    activation1.backward(dense2.dinputs)
+    dense1.backward(activation1.dinputs)
+
+    optimizer.pre_update_params()
+    optimizer.update_params(dense1)
+    optimizer.update_params(dense2)
+    optimizer.post_update_params()
 
 
-
-            
-
-
-
-
-
-a = [-2, 1, 4, 0, -84, 48, -9, 7]
-a = np.array(a)
-a.reshape(-1, 1)
-a = np.diagflat(a)
-print(a)
