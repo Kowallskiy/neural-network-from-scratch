@@ -24,3 +24,13 @@ class Layer_Dense:
 
         if self.l2_weight_regularizer > 0:
             self.dweights += 2 * self.l2_weight_regularizer * self.weights
+
+        if self.l1_bias_regularizer > 0:
+            dl1 = np.ones_like(self.biases)
+            dl1[self.biases < 0] = -1
+            self.dbiases += self.l1_bias_regularizer * dl1
+
+        if self.l2_bias_regularizer > 0:
+            self.dbiases += 2 * self.l2_bias_regularizer * self.biases
+
+        self.dinputs = np.dot(dvalues, self.weights.T)
