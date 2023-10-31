@@ -222,7 +222,7 @@ for epoch in range(10001):
             f'reg_loss: {regularization_loss:.3f}), ' +
             f'lr: {optimizer.current_learning_rate}')
         
-    data_loss.backward(data_loss.output, y)
+    data_loss.backward(activation2.output, y)
     activation2.backward(data_loss.dinputs)
     dense2.backward(activation2.dinputs)
     activation1.backward(dense2.dinputs)
